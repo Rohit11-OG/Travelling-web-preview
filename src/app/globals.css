@@ -1,26 +1,204 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0f1c;
+  --foreground: #e2e8f0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* ===== TYPOGRAPHY ===== */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.text-accent {
+  color: #e3b341;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0f1c;
+}
+::-webkit-scrollbar-thumb {
+  background: #26324a;
+  border-radius: 10px;
+  border: 2px solid #0a0f1c;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4d70;
+}
+
+/* Selection color */
+::selection {
+  background: rgba(227, 179, 65, 0.35);
+  color: #fff;
+}
+
+/* ===== SURFACES ===== */
+.glass {
+  background: #121a2c;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.glass-strong {
+  background: #182238;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.glass-nav {
+  background: rgba(10, 15, 28, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* ===== TEXT ACCENT (solid gold) ===== */
+.gradient-text,
+.gradient-text-gold {
+  color: #e3b341;
+}
+
+/* ===== BUTTONS ===== */
+.btn-gradient,
+.btn-gold {
+  background: #e3b341;
+  color: #0a0f1c;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.btn-gradient:hover,
+.btn-gold:hover {
+  background: #f0c75e;
+  transform: translateY(-1px);
+}
+
+/* ===== CARD HOVER ===== */
+.card-hover {
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(227, 179, 65, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* ===== GLOW -> subtle shadow ===== */
+.glow-blue,
+.glow-purple {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.text-glow {
+  text-shadow: none;
+}
+
+/* ===== BACKGROUND ORBS -> deep navy ===== */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.35;
+  pointer-events: none;
+  animation: float 16s ease-in-out infinite;
+}
+.orb-1 {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(30, 58, 95, 0.5), transparent 70%);
+  top: -160px;
+  left: -160px;
+}
+.orb-2 {
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(227, 179, 65, 0.08), transparent 70%);
+  top: 35%;
+  right: -160px;
+  animation-delay: -5s;
+}
+.orb-3 {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(20, 83, 75, 0.35), transparent 70%);
+  bottom: -120px;
+  left: 32%;
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, -24px) scale(1.04); }
+}
+
+/* ===== FADE IN ANIMATIONS ===== */
+.animate-fade-in {
+  animation: fadeIn 0.7s ease-out both;
+}
+.animate-fade-in-delay {
+  animation: fadeIn 0.7s ease-out 0.25s both;
+}
+.animate-fade-in-delay-2 {
+  animation: fadeIn 0.7s ease-out 0.5s both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== DECORATIVE (kept as no-ops for class compatibility) ===== */
+.shimmer {
+  position: relative;
+}
+.pulse-glow {
+  /* intentionally blank */
+}
+
+/* ===== HERO IMAGE OVERLAY ===== */
+.hero-gradient {
+  background: linear-gradient(180deg, rgba(10, 15, 28, 0.55) 0%, rgba(10, 15, 28, 0.75) 55%, rgba(10, 15, 28, 0.97) 100%);
+}
+
+/* ===== INPUT STYLES ===== */
+.input-dark {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.input-dark::placeholder {
+  color: rgba(226, 232, 240, 0.35);
+}
+.input-dark:focus {
+  outline: none;
+  border-color: rgba(227, 179, 65, 0.65);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(227, 179, 65, 0.12);
+}
+.input-dark option {
+  background: #121a2c;
+  color: #e2e8f0;
+}
+input[type="date"].input-dark::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
 }
