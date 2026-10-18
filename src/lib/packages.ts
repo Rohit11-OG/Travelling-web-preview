@@ -1,5 +1,5 @@
 import { cacheLife } from "next/cache";
-import { getDb, PackageRow, PlanRow } from "./db";
+import { all, get, PackageRow, PlanRow } from "./db";
 import type { ApiPackage } from "../types";
 
 function toApiPackage(row: PackageRow, plans: PlanRow[]): ApiPackage {
@@ -18,18 +18,18 @@ function toApiPackage(row: PackageRow, plans: PlanRow[]): ApiPackage {
 export async function getPackages(): Promise<ApiPackage[]> {
   "use cache";
   cacheLife("hours");
-  const db = getDb();
-  const plans = db.prepare("SELECT * FROM plans ORDER BY price_multiplier ASC").all() as PlanRow[];
-  const rows = db.prepare("SELECT * FROM packages").all() as PackageRow[];
+  const [plans, rows] = await Promise.all([
+    all<PlanRow>("SELECT * FROM plans ORDER BY price_multiplier ASC"),
+    all<PackageRow>("SELECT * FROM packages"),
+  ]);
   return rows.map((row) => toApiPackage(row, plans.filter((p) => p.package_id === row.id)));
 }
 
 export async function getPackage(id: string): Promise<ApiPackage | null> {
   "use cache";
   cacheLife("hours");
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM packages WHERE id = ?").get(id) as PackageRow | undefined;
+  const row = await get<PackageRow>("SELECT * FROM packages WHERE id = ?", id);
   if (!row) return null;
-  const plans = db.prepare("SELECT * FROM plans WHERE package_id = ? ORDER BY price_multiplier ASC").all(id) as PlanRow[];
+  const plans = await all<PlanRow>("SELECT * FROM plans WHERE package_id = ? ORDER BY price_multiplier ASC", id);
   return toApiPackage(row, plans);
 }

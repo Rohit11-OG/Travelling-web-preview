@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
-import { getDb } from "./db";
+import { getDb, get, run } from "./db";
 
 const SESSION_COOKIE = "wanderlust_session";
 const SESSION_DAYS = 7;
@@ -19,18 +19,24 @@ export function verifyPassword(password: string, stored: string): boolean {
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
-export function createSession(userId: number): string {
+export async function createSession(userId: number): Promise<string> {
   const token = crypto.randomBytes(32).toString("hex");
-  const db = getDb();
-  db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run();
-  // Store in SQLite's own datetime format so the `expires_at > datetime('now')` check compares like with like.
-  db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', ?))")
-    .run(token, userId, `+${SESSION_DAYS} days`);
+  await (await getDb()).batch(
+    [
+      "DELETE FROM sessions WHERE expires_at <= datetime('now')",
+      // Store in SQLite's own datetime format so the `expires_at > datetime('now')` check compares like with like.
+      {
+        sql: "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', ?))",
+        args: [token, userId, `+${SESSION_DAYS} days`],
+      },
+    ],
+    "write"
+  );
   return token;
 }
 
-export function deleteSession(token: string) {
-  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+export async function deleteSession(token: string) {
+  await run("DELETE FROM sessions WHERE token = ?", token);
 }
 
 export interface SessionUser {
@@ -39,14 +45,13 @@ export interface SessionUser {
   email: string;
 }
 
-export function getUserByToken(token: string): SessionUser | null {
-  const row = getDb()
-    .prepare(
-      `SELECT u.id, u.name, u.email FROM sessions s
-       JOIN users u ON u.id = s.user_id
-       WHERE s.token = ? AND s.expires_at > datetime('now')`
-    )
-    .get(token) as SessionUser | undefined;
+export async function getUserByToken(token: string): Promise<SessionUser | null> {
+  const row = await get<SessionUser>(
+    `SELECT u.id, u.name, u.email FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token = ? AND s.expires_at > datetime('now')`,
+    token
+  );
   return row ?? null;
 }
 

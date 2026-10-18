@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getDb } from "@/lib/db";
+import { run } from "@/lib/db";
 import { readJson, str } from "@/lib/http";
 
 export async function POST(request: NextRequest) {
@@ -11,9 +11,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "All fields are required" }, { status: 400 });
     }
 
-    getDb()
-      .prepare("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)")
-      .run(name, email, subject, message);
+    await run("INSERT INTO contacts (name, email, subject, message) VALUES (?, ?, ?, ?)", name, email, subject, message);
 
     return Response.json({ success: true, message: "Message received. We will get back to you within 24 hours." }, { status: 201 });
   } catch (err) {

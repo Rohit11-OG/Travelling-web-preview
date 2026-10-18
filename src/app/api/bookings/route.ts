@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getDb, PackageRow, PlanRow } from "@/lib/db";
+import { all, get, run, PackageRow, PlanRow } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { readJson, str } from "@/lib/http";
 
@@ -21,9 +21,7 @@ export async function GET() {
       return Response.json({ error: "You must be logged in to view bookings" }, { status: 401 });
     }
 
-    const bookings = getDb()
-      .prepare(`${BOOKING_SELECT} WHERE b.user_id = ? ORDER BY b.created_at DESC`)
-      .all(user.id);
+    const bookings = await all(`${BOOKING_SELECT} WHERE b.user_id = ? ORDER BY b.created_at DESC`, user.id);
 
     return Response.json({ bookings });
   } catch (err) {
@@ -65,11 +63,10 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Travel date must be in the future" }, { status: 400 });
     }
 
-    const db = getDb();
-    const pkg = db.prepare("SELECT * FROM packages WHERE id = ?").get(packageId) as PackageRow | undefined;
+    const pkg = await get<PackageRow>("SELECT * FROM packages WHERE id = ?", packageId);
     if (!pkg) return Response.json({ error: "Package not found" }, { status: 404 });
 
-    const plan = db.prepare("SELECT * FROM plans WHERE id = ? AND package_id = ?").get(planId, packageId) as PlanRow | undefined;
+    const plan = await get<PlanRow>("SELECT * FROM plans WHERE id = ? AND package_id = ?", planId, packageId);
     if (!plan) return Response.json({ error: "Plan not found for this package" }, { status: 404 });
 
     if (travelerCount > pkg.max_group_size) {
@@ -80,12 +77,13 @@ export async function POST(request: NextRequest) {
     const totalPrice = unitPrice * travelerCount;
     const bookingId = `BK-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
-    db.prepare(
+    await run(
       `INSERT INTO bookings (id, user_id, package_id, plan_id, travel_date, travelers, total_price, customer_name, email, phone, special_requests, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`
-    ).run(bookingId, user.id, packageId, planId, travelDate, travelerCount, totalPrice, customerName, email, phone, specialRequests || null);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+      bookingId, user.id, packageId, planId, travelDate, travelerCount, totalPrice, customerName, email, phone, specialRequests || null
+    );
 
-    const booking = db.prepare(`${BOOKING_SELECT} WHERE b.id = ?`).get(bookingId);
+    const booking = await get(`${BOOKING_SELECT} WHERE b.id = ?`, bookingId);
 
     return Response.json({ booking }, { status: 201 });
   } catch (err) {

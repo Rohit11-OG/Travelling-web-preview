@@ -1,24 +1,25 @@
-import Database from "better-sqlite3";
+import { createClient, type Client, type InValue } from "@libsql/client";
 import path from "path";
 import fs from "fs";
 import { packages as seedPackages } from "../data/packages";
 
-const DB_DIR = path.join(process.cwd(), "data");
-if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
-const DB_PATH = path.join(DB_DIR, "wanderlust.db");
+const globalForDb = globalThis as unknown as { db?: Promise<Client> };
 
-const globalForDb = globalThis as unknown as { db?: Database.Database };
-
-function createDb() {
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  initSchema(db);
-  return db;
+function connect(): Client {
+  const url = process.env.TURSO_DATABASE_URL;
+  if (url) return createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+  // Vercel's disk is read-only and per-instance, so a local file can't hold users or bookings there.
+  if (process.env.VERCEL) {
+    throw new Error("TURSO_DATABASE_URL is not set: connect a Turso database in Vercel (Storage tab), then redeploy");
+  }
+  const dir = path.join(process.cwd(), "data");
+  fs.mkdirSync(dir, { recursive: true });
+  return createClient({ url: `file:${path.join(dir, "wanderlust.db")}` });
 }
 
-function initSchema(db: Database.Database) {
-  db.exec(`
+async function init(): Promise<Client> {
+  const db = connect();
+  await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -93,8 +94,9 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
 
-  const pkgCount = (db.prepare("SELECT COUNT(*) as c FROM packages").get() as { c: number }).c;
-  if (pkgCount === 0) seedDatabase(db);
+  const { rows } = await db.execute("SELECT COUNT(*) AS c FROM packages");
+  if (Number(rows[0].c) === 0) await seedDatabase(db);
+  return db;
 }
 
 const PLAN_TEMPLATES = [
@@ -139,35 +141,49 @@ const PLAN_TEMPLATES = [
   },
 ];
 
-function seedDatabase(db: Database.Database) {
-  const insertPkg = db.prepare(`
-    INSERT INTO packages (id, title, destination, region, duration, base_price, rating, reviews, image, description, highlights, itinerary, inclusions, exclusions, category, featured, max_group_size)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertPlan = db.prepare(`
-    INSERT INTO plans (package_id, name, tier, price_multiplier, perks)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-
-  const seedAll = db.transaction(() => {
-    for (const p of seedPackages) {
-      insertPkg.run(
-        p.id, p.title, p.destination, p.region, p.duration, p.price, p.rating, p.reviews,
-        p.image, p.description, JSON.stringify(p.highlights), JSON.stringify(p.itinerary),
-        JSON.stringify(p.inclusions), JSON.stringify(p.exclusions), p.category,
-        p.featured ? 1 : 0, p.maxGroupSize
-      );
-      for (const plan of PLAN_TEMPLATES) {
-        insertPlan.run(p.id, plan.name, plan.tier, plan.priceMultiplier, JSON.stringify(plan.perks));
-      }
-    }
-  });
-  seedAll();
+// Idempotent (INSERT OR IGNORE / WHERE NOT EXISTS) because parallel build workers or cold starts can seed at once.
+async function seedDatabase(db: Client) {
+  await db.batch(
+    seedPackages.flatMap((p) => [
+      {
+        sql: `INSERT OR IGNORE INTO packages (id, title, destination, region, duration, base_price, rating, reviews, image, description, highlights, itinerary, inclusions, exclusions, category, featured, max_group_size)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          p.id, p.title, p.destination, p.region, p.duration, p.price, p.rating, p.reviews,
+          p.image, p.description, JSON.stringify(p.highlights), JSON.stringify(p.itinerary),
+          JSON.stringify(p.inclusions), JSON.stringify(p.exclusions), p.category,
+          p.featured ? 1 : 0, p.maxGroupSize,
+        ],
+      },
+      ...PLAN_TEMPLATES.map((plan) => ({
+        sql: `INSERT INTO plans (package_id, name, tier, price_multiplier, perks)
+              SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM plans WHERE package_id = ? AND tier = ?)`,
+        args: [p.id, plan.name, plan.tier, plan.priceMultiplier, JSON.stringify(plan.perks), p.id, plan.tier],
+      })),
+    ]),
+    "write"
+  );
 }
 
-export function getDb() {
-  if (!globalForDb.db) globalForDb.db = createDb();
-  return globalForDb.db;
+export function getDb(): Promise<Client> {
+  // On failure (e.g. a network blip) forget the promise so the next request retries instead of failing forever.
+  return (globalForDb.db ??= init().catch((err) => {
+    globalForDb.db = undefined;
+    throw err;
+  }));
+}
+
+export async function all<T>(sql: string, ...args: InValue[]): Promise<T[]> {
+  const { rows } = await (await getDb()).execute({ sql, args });
+  return rows as unknown as T[];
+}
+
+export async function get<T>(sql: string, ...args: InValue[]): Promise<T | undefined> {
+  return (await all<T>(sql, ...args))[0];
+}
+
+export async function run(sql: string, ...args: InValue[]) {
+  return (await getDb()).execute({ sql, args });
 }
 
 export interface PlanRow {

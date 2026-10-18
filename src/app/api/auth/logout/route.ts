@@ -5,7 +5,7 @@ export async function POST() {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value;
-    if (token) deleteSession(token);
+    if (token) await deleteSession(token);
     await clearSessionCookie();
     return Response.json({ success: true });
   } catch (err) {
